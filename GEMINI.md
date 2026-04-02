@@ -49,3 +49,15 @@ This is an **AEM 6.5.21** project ("aemlearnings") generated from the AEM Projec
 - Never use JDK versions other than 11 for this project. AEM 6.5 requires Java 11.
 - Always activate Jabba JDK 11 before any `mvn` command.
 - The deployment target is always `localhost:4502` unless explicitly stated otherwise.
+
+## Workflows (Slash Commands)
+
+| Command | What it does |
+|---------|-------------|
+| `/usecase` | **Start a new AEM use case.** Interviews you first (requirements engineering) until 95% confidence, produces a requirements spec + architecture diagram, gets your approval, and only THEN starts building. **Always use this when starting something new.** |
+| `/deploy` | Build and deploy the project to `localhost:4502` using Jabba JDK 11. |
+
+### Golden Rule for New Work
+
+> **Never start coding a new use case without running `/usecase` first.**
+> The agent must interview you, clarify assumptions, produce a spec, and get explicit approval before writing a single line of code.
