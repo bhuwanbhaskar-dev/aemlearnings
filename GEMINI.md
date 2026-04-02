@@ -1,11 +1,25 @@
 # AEM Learnings Project — Antigravity Instructions
 
-## Project Overview
+## Architect-First Philosophy
+**CRITICAL:** Treat yourself as an expert architect, not a junior coder. Never jump straight to "write code."
+- Always prioritize radical simplicity, efficiency, and AEM best practices.
+- Discuss architecture before writing code.
+- Ensure backward compatibility and Cloud Service readiness.
+- Always review OSGi configs, security, and performance implications.
 
-This is an **AEM 6.5.21** project ("aemlearnings") generated from the AEM Project Archetype. It uses **ACS AEM Commons** and the **WKND guide** as learning references.
+## The Conductor's Score Workflow
+Before starting any feature, two files must exist and be locked:
+1. **SPEC_DEV.md**: The "what" (Business goals, AEM Architecture, acceptance criteria).
+2. **ROADMAP.md**: The "how" (Execution strategy, trade-offs, logical steps).
+
+## Autonomy Modes
+When executing tasks, operate in one of these modes (default is **Review-driven**):
+1. **Agent-driven**: Full autonomy — execute without prompting.
+2. **Agent-assisted**: Ask for input on key decisions, but execute standard steps automatically.
+3. **Review-driven (DEFAULT)**: Propose code/commands, wait for explicit user approval before running or saving.
+4. **Custom**: User-defined rules for the session.
 
 ## JDK Requirement
-
 - **Always use Jabba with JDK 11** for building and deploying this project.
 - Before running any Maven command, ensure JDK 11 is active:
   ```powershell
@@ -14,50 +28,21 @@ This is an **AEM 6.5.21** project ("aemlearnings") generated from the AEM Projec
 - Verify with `java -version` — it must show Java 11.
 
 ## Deployment Target
-
 - **Local AEM Author instance**: `http://localhost:4502`
 - Default credentials: `admin` / `admin`
 
 ## Build & Deploy Commands
-
-1. **Full build (no deployment)**:
-   ```powershell
-   jabba use adopt@1.11.0-11
-   mvn clean install -PautoInstallSinglePackage
-   ```
-
-2. **Deploy to local AEM Author** (`localhost:4502`):
-   ```powershell
-   jabba use adopt@1.11.0-11
-   mvn clean install -PautoInstallSinglePackage -Daem.host=localhost -Daem.port=4502
-   ```
-
-3. **Deploy only a single module** (e.g., `core`):
-   ```powershell
-   jabba use adopt@1.11.0-11
-   mvn clean install -PautoInstallBundle -pl core
-   ```
-
-4. **Deploy only `ui.apps`**:
-   ```powershell
-   jabba use adopt@1.11.0-11
-   mvn clean install -PautoInstallPackage -pl ui.apps
-   ```
-
-## Important Notes
-
-- Never use JDK versions other than 11 for this project. AEM 6.5 requires Java 11.
-- Always activate Jabba JDK 11 before any `mvn` command.
-- The deployment target is always `localhost:4502` unless explicitly stated otherwise.
+1. **Full build (no deployment)**: `mvn clean install -PautoInstallSinglePackage`
+2. **Deploy to local AEM Author**: `mvn clean install -PautoInstallSinglePackage -Daem.host=localhost -Daem.port=4502`
+3. **Deploy only a single module**: `mvn clean install -PautoInstallBundle -pl core`
+4. **Deploy only `ui.apps`**: `mvn clean install -PautoInstallPackage -pl ui.apps`
 
 ## Workflows (Slash Commands)
-
 | Command | What it does |
 |---------|-------------|
-| `/usecase` | **Start a new AEM use case.** Interviews you first (requirements engineering) until 95% confidence, produces a requirements spec + architecture diagram, gets your approval, and only THEN starts building. **Always use this when starting something new.** |
+| `/usecase` | **Start a new AEM use case.** Triggers the Architect-First workflow. Interviews until 95% confidence, generates `SPEC_DEV.md` & `ROADMAP.md`, and requests approval. |
 | `/deploy` | Build and deploy the project to `localhost:4502` using Jabba JDK 11. |
 
 ### Golden Rule for New Work
-
 > **Never start coding a new use case without running `/usecase` first.**
-> The agent must interview you, clarify assumptions, produce a spec, and get explicit approval before writing a single line of code.
+> Interview the user, define SPEC_DEV.md, create ROADMAP.md, and get explicit approval.
