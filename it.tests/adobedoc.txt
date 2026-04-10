@@ -1,0 +1,26 @@
+Subject: Request for Access Rights - AEMaaCS Content Copy Tool (Deployment Manager + AEM Administrators)
+Dear [Technical Architect's Name],
+It seems it’s not just the Deployment Manager role but also the AEM Administrators role that is required to fully use the Content Copy feature. I did some analysis below.
+With only the Deployment Manager role (and no AEM-Administrators group membership):
+
+You can create, edit, and manage content sets in the Cloud Manager UI.
+This includes defining the JCR paths you want to copy (e.g., /content, /conf, specific DAM folders, etc.).
+However, you cannot start the copy job, cancel it, or actually trigger the transfer.
+
+Why both roles are needed:
+The AEMaaCS Content Copy tool requires both the Deployment Manager role (Cloud Manager level) and membership in the AEM Administrators group (AEM level) to start or cancel a content copy.
+Content Copy operations map directly to deployment-level actions in Cloud Manager. Under the hood, initiating Content Copy behaves like running a special pipeline or environment job. It packages mutable content from the source and imports it into the destination environment (with optional wipe).
+I checked this point: “But don’t you feel this level of access (AEM Administrators) is dangerous just for Content Copy operation or am I missing something?”
+Your concern is completely valid and shared by many AEMaaCS customers. The Content Copy tool is not a simple “copy file” operation. Under the hood it:
+
+Reads arbitrary paths from the source author
+(Optionally) wipes large sections of the target author
+Packages mutable content (including versions, if selected)
+Imports it with full integrity
+
+These are inherently administrative operations inside AEM, so Adobe chose to gate them behind the existing full-admin group rather than creating a new, narrowly-scoped permission just for Content Copy.
+After deep research, there is currently no finer-grained alternative available.
+[Insert Official Adobe Documentation Link + Permission Table Screenshot here]
+(Example link: https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/implementing/developer-tools/content-copy)
+Could you please highlight how we shall proceed? For validation, one common option many teams use is time-bound / just-in-time access — e.g., granting the AEM Administrators profile temporarily (such as “I need Content Copy access for the next 4 hours”).
+Looking forward to your guidance on the best and most secure way forward.
