@@ -1,10 +1,1 @@
-I debugged the pipeline build failure log and identified the root cause:
-Issue:
-WordDelimiterFilterFactory was failing because preserveOriginal="{Boolean}true" was being passed as a boolean. The filter expects an integer value (1 or 0), causing NumberFormatException and blocking the deployment.
-Fix:
-Changed to:
-XML<WordDelimiter jcr:primaryType="nt:unstructured" preserveOriginal="1"/>
-I have applied the fix locally and triggered a new deployment pipeline. I’ve also updated Adobe Support ticket E-001882803 with the details and the official Javadoc reference for their review.
-I’ll let you know as soon as the pipeline completes and confirm if it goes green.
-
-https://developer.adobe.com/experience-manager/reference-materials/cloud-service/javadoc/org/apache/lucene/analysis/miscellaneous/WordDelimiterFilterFactory.html
+#Text
