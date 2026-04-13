@@ -1,1 +1,514 @@
-#Text
+# AEMaaCS Oak Indexing — Comprehensive Expert Knowledge Base
+
+## Table of Contents
+1. [Architecture & Fundamentals](#architecture--fundamentals)
+2. [Query Cost Estimation Deep-Dive](#query-cost-estimation-deep-dive)
+3. [Index Types & Configuration](#index-types--configuration)
+4. [Naming Conventions & Versioning](#naming-conventions--versioning)
+5. [Blue-Green Deployment & Reindexing Lifecycle](#blue-green-deployment--reindexing-lifecycle)
+6. [OOTB Index Customization](#ootb-index-customization)
+7. [Tika & Binary Extraction](#tika--binary-extraction)
+8. [Content Fragments & GraphQL Indexing](#content-fragments--graphql-indexing)
+9. [Advanced Features](#advanced-features)
+10. [Known Limitations & Unsupported Features](#known-limitations--unsupported-features)
+11. [Common Pitfalls & Production Incidents](#common-pitfalls--production-incidents)
+12. [Debugging & Diagnostic Tools](#debugging--diagnostic-tools)
+13. [Cost Tuning Properties](#cost-tuning-properties)
+14. [Community Lessons Learned](#community-lessons-learned)
+
+---
+
+## Architecture & Fundamentals
+
+### AEMaaCS vs On-Premise Key Differences
+| Aspect | AEM 6.5 (On-Prem) | AEMaaCS |
+|--------|-------------------|---------|
+| Index Manager | Available via JMX | **NOT available** |
+| Manual reindexing | Supported via JMX | **NOT supported** — handled by Cloud Manager |
+| Index types | Lucene, Property, Ordered | **Lucene ONLY** |
+| Deployment | Manual via CRX/DE | **Code-only via CI/CD pipeline** |
+| Reindex trigger | `reindex=true` on node | **Automatic** on version change detection |
+| Index location | `/oak:index/` (runtime) | `ui.apps/src/main/content/jcr_root/_oak_index/` (code) |
+| Elasticsearch | Not applicable | Internal implementation detail (transparent to devs) |
+| Custom analyzers | Supported | **NOT supported** |
+| `useInSimilarity` | Supported | **NOT supported** |
+
+### Elasticsearch Abstraction in AEMaaCS
+- AEMaaCS internally MAY use Elasticsearch to fulfill queries
+- All configuration MUST be provided as Lucene index definitions
+- This is an implementation detail abstracted from developers
+- Queries written against Lucene indexes work seamlessly regardless of backend
+- **Never** use `elastic-async` in async property — it's a cloud-internal detail
+
+### Traversal Limit
+- Oak enforces a **100,000 node traversal limit**
+- Queries without a suitable index fall back to node traversal
+- If traversal exceeds the limit: `UnsupportedOperationException`
+- **Never** increase `queryLimitReads` as a permanent fix — it masks the root cause
+
+---
+
+## Query Cost Estimation Deep-Dive
+
+### The 4-Step IndexPlanner.getPlan() Flow
+
+```
+IndexPlanner.getPlan(Filter filter)
+  ├─ Step 1: getApplicableIndexingRule(nodeType)
+  │   Does this index have indexRules for the queried nodeType?
+  │   If NO → return null (cost = INFINITY, index eliminated)
+  │
+  ├─ Step 2: canHandlePropertyRestriction(filter)
+  │   Is the queried property defined in this index's properties?
+  │   If NO → return null (cost = INFINITY, index eliminated)
+  │
+  ├─ Step 3: Path restriction check
+  │   Does query path fall within index's includedPaths/queryPaths?
+  │   If NO → return null (cost = INFINITY, index eliminated)
+  │
+  └─ Step 4: Calculate estimated cost
+      cost = estimatedEntryCount × pathFactor + overhead(2)
+      Where pathFactor = subtreeSize / totalIndexedNodes
+      (only when evaluatePathRestrictions=true)
+```
+
+### Critical Insight: Cost-Estimate Poisoning — When It Does and Doesn't Apply
+
+**Does NOT apply to narrowly defined property indexes:**
+- If custom index only defines `Bhuwan` and `cq:xfMasterVariation`
+- Query on `jcr:title` → Step 2 fails → custom index returns INFINITY → ignored
+- The query planner ONLY considers indexes that can actually serve the specific query
+
+**DOES apply when:**
+1. `nodeScopeIndex=true` is set broadly → index claims to handle fulltext across all properties
+2. Fulltext aggregation is configured → index becomes candidate for `jcr:contains(., 'term')`
+3. Overlapping property definitions → two indexes define same property with `propertyIndex=true`
+
+### Lucene Inverted Index Sparsity (Write Path)
+- Adding a property to a global index does NOT create entries for nodes without that property
+- Lucene uses inverted index: `term → [docId list]`
+- If node doesn't have the property, nothing is written
+- Storage overhead proportional only to nodes that HAVE the property
+- For property on 5 nodes out of 100,000: near-zero overhead
+
+### Read Path Performance
+- Query `WHERE [jcr:content/Bhuwan] = 'test'`:
+  1. Dictionary lookup: `Bhuwan` → term entry
+  2. Postings list: `test` → [docId:47, docId:192]
+  3. Return exactly 2 documents
+- Complexity: O(1) / O(log n) — no scan of all pages
+
+---
+
+## Index Types & Configuration
+
+### Mandatory Properties for AEMaaCS
+```xml
+<myIndex
+    jcr:primaryType="oak:QueryIndexDefinition"
+    type="lucene"
+    compatVersion="{Long}2"
+    async="[async,nrt]"
+    evaluatePathRestrictions="{Boolean}true"
+    reindex="{Boolean}false"
+    includedPaths="[/content/mysite]"
+    queryPaths="[/content/mysite]">
+```
+
+### Valid `async` Values
+| Value | Use Case |
+|-------|----------|
+| `[async]` | Standard background indexing |
+| `[async,nrt]` | Near Real-Time — lower latency for search results |
+| `[fulltext-async]` | Separate lane for fulltext indexing |
+
+### Invalid `async` Values (Will Fail Silently)
+| Value | Problem |
+|-------|---------|
+| `sync` | Synchronous indexing NOT supported on AEMaaCS |
+| `elastic-async` | Cloud-internal implementation detail |
+| (missing) | Index silently ignored |
+
+### Property Definition Options
+| Property | Purpose | Performance Impact |
+|----------|---------|-------------------|
+| `propertyIndex=true` | Equality/range queries | Low — recommended for filters |
+| `analyzed=true` | Fulltext tokenized search | Medium — only for `jcr:contains` |
+| `ordered=true` | `ORDER BY` support | **High** — expensive for writes |
+| `nodeScopeIndex=true` | Include in parent fulltext | **High** — index bloat risk |
+| `useInExcerpt=true` | Include in search excerpts | Medium — increases index size |
+| `useInSpellcheck=true` | Spellcheck dictionary | Medium — additional data structures |
+| `useInSuggest=true` | Autocomplete/type-ahead | Medium — additional data structures |
+| `facets=true` | Faceting support | Medium - ensure ACL checks configured |
+
+### Contradictory Configuration Warning
+- `analyzed=true` + `propertyIndex=true` on same property = contradictory
+- `analyzed` is for fulltext tokenization
+- `propertyIndex` is for exact equality checks
+- Pick one based on your query pattern
+
+---
+
+## Naming Conventions & Versioning
+
+### OOTB Customization Pattern
+```
+<OOTBName>-<productVersion>-custom-<customVersion>
+```
+Examples:
+- `damAssetLucene-9-custom-1`
+- `cqPageLucene-10-custom-2`
+
+### Fully Custom Index Pattern
+```
+<prefix>.<indexName>-<version>-custom-<customVersion>
+```
+Where prefix is 2–5 lowercase chars. Examples:
+- `wknd.article-search-1-custom-1`
+- `acme.product-catalog-1-custom-3`
+
+### Critical Rule: Fully Custom Index Names MUST Contain a Dot
+- If it doesn't contain a dot, AEMaaCS may not recognize it as custom
+- The prefix before the dot identifies the project/tenant
+
+### Version Increment Rules
+- Custom version `<M>` must be a positive integer
+- Must increment on EVERY change (don't reuse old version numbers)
+- Changing definition without incrementing → **changes silently ignored**
+- This is the #1 cause of "my index changes aren't working"
+
+### How to Find Current OOTB Version Number
+1. Log into AEMaaCS environment (Dev/Stage)
+2. Open CRX/DE Lite (`/crx/de`)
+3. Navigate to `/oak:index/`
+4. Find the OOTB index (e.g., `cqPageLucene-2`, `damAssetLucene-8`)
+5. Use that version as your baseline
+6. **Always use Cloud environment, NOT local SDK** — versions may differ
+
+### Known OOTB Indexes (Never Create New on These NodeTypes)
+`damAssetLucene`, `cqPageLucene`, `socialLucene`, `commerceLucene`, `cqTagLucene`, `workflowDataLucene`, `lucene`, `nodetypeLucene`, `authorizables`
+
+---
+
+## Blue-Green Deployment & Reindexing Lifecycle
+
+### How Cloud Manager Handles Indexes
+
+```
+Code commit with index change
+  → Cloud Manager detects index definition change (via naming convention)
+  → Pre-indexing on green environment (background)
+  → async-reindex lane handles the work
+  → CM monitors progress (visible in pipeline UI)
+  → Old index stays active for blue environment
+  → Once green is fully indexed → traffic switches
+  → Old index eventually garbage collected
+```
+
+### Key Internal Properties
+| Property | Meaning |
+|----------|---------|
+| `async-reindex` | Dedicated background lane for reindexing |
+| `async-previous` | Tracks checkpoint states during version transitions |
+| Neither is for developer configuration — they're internal |
+
+### Reindex Timing Considerations
+- Reindexing time depends on repository size
+- Large repositories (millions of nodes) can take hours
+- Affects deployment time — plan accordingly
+- Unnecessary reindexes (wrong version management) waste significant time
+
+---
+
+## OOTB Index Customization
+
+### Why Customize Instead of Creating New
+
+| Reason | Detail |
+|--------|--------|
+| CM Index Merge | OOTB customizations get special lifecycle handling |
+| Version Upgrades | Adobe auto-merges your customization when base version changes |
+| Quality Gates | `aem-analyzer-plugin` flags new indexes on OOTB node types |
+| Storage Efficiency | One index vs. two separate Lucene segment sets |
+| Query Planner | Avoids any fulltext/aggregate interference (even if property-only is safe) |
+
+### When Fully Custom IS Appropriate
+- Node type NOT covered by any OOTB index (e.g., custom `wknd:Product`)
+- Use case fundamentally different from OOTB index purpose
+- No existing OOTB index serves the node type
+
+### Important: OOTB Customization is a REPLACEMENT
+- When you create `cqPageLucene-10-custom-1`, it replaces the OOTB version
+- You must preserve ALL existing OOTB properties you still need
+- Narrowing `includedPaths` too aggressively will break site-wide search
+- Best approach: copy production OOTB definition → add your properties on top
+
+---
+
+## Tika & Binary Extraction
+
+### Architecture Difference in AEMaaCS
+- **On-Prem:** Local Tika OSGi config handles binary text extraction
+- **AEMaaCS:** Asset Compute Service handles extraction (NOT local Tika)
+- Custom `tika-config.xml` often has **NO EFFECT** in AEMaaCS
+
+### damAssetLucene Tika Requirements
+```xml
+<tika jcr:primaryType="nt:unstructured">
+    <config jcr:primaryType="nt:unstructured"
+            mime="application/pdf"/>
+</tika>
+```
+- All `damAssetLucene` customizations MUST include a `tika` child node
+- Without it: binary text extraction configuration is lost
+- Tika config should limit to text-based MIME types for performance
+
+### Controlling What Gets Indexed
+- To exclude specific asset types from fulltext search:
+  - Remove the aggregate clause targeting `jcr:content/renditions/cqdam.text.txt`
+  - OR create post-processing workflow to delete/empty the text rendition
+- Do NOT rely on Tika config overrides — they're unreliable in AEMaaCS
+
+---
+
+## Content Fragments & GraphQL Indexing
+
+### Common Issues
+- GraphQL queries on custom CF properties trigger traversal if property not indexed
+- Custom CF properties must be added to `damAssetLucene` customization (CFs are `dam:Asset`)
+- `graphqlConfig` child node may need correct Tika setup
+
+### Troubleshooting Flow
+1. Use Query Performance Tool → check if query shows `TRAVERSAL`
+2. Verify `propertyNames` in index include the CF fields used in GraphQL filters
+3. Check `queryPaths` covers CF storage location (usually `/content/dam`)
+4. Verify Dispatcher is not blocking GraphQL endpoints (404 ≠ index issue)
+
+---
+
+## Advanced Features
+
+### Index Tags & Query Hints
+```xml
+<!-- Index definition -->
+<myIndex tags="[my-tag]" selectionPolicy="tag" ... />
+```
+```sql
+-- Query with hint
+SELECT * FROM [nt:base]
+WHERE ISDESCENDANTNODE('/content/mysite')
+OPTION(index tag my-tag)
+```
+- Use as **last resort** — bypasses cost-based optimization
+- `selectionPolicy="tag"` hides index from general selection
+- After changing `selectionPolicy`, set `refresh=true` on the index
+- Makes queries fragile — if index is deleted, query fails (no fallback)
+
+### Aggregation Rules
+- Allow indexing child node properties at parent level
+- Enable `jcr:contains(., 'term')` queries across node hierarchy
+- Use specific paths, avoid wildcards
+- Never aggregate large binary properties
+- Audit for duplicate/redundant aggregation rules
+
+### LIKE / Wildcard Queries
+- Prefix matching (`LIKE 'prefix%'`) → efficient with `propertyIndex=true`
+- Leading wildcards (`LIKE '%suffix'`) → **extremely expensive**, may trigger traversal
+- Oak cannot optimize arbitrary substring searches
+- Always prefer exact matches or prefix matches
+
+### Regex / valuePattern
+- `valuePattern` in index definition: limits which values are indexed
+- Used for structural enforcement, NOT for LIKE queries
+- Only affects equality and `IN` conditions
+
+---
+
+## Known Limitations & Unsupported Features
+
+| Feature | Status |
+|---------|--------|
+| Custom analyzers | ❌ NOT supported |
+| `useInSimilarity=true` | ❌ NOT supported |
+| `elastic-async` | ❌ Cloud internal — do not use |
+| Synchronous indexes | ❌ NOT supported |
+| Index Manager UI | ❌ NOT available |
+| Manual reindexing | ❌ NOT supported |
+| Non-Lucene index types | ❌ NOT supported |
+| `reindex=true` in code | ❌ Causes reindex on EVERY deployment |
+| Direct CRX/DE index changes | ❌ NOT supported in production |
+| Uniqueness constraints via async index | ❌ Async indexes cannot enforce uniqueness |
+
+---
+
+## Common Pitfalls & Production Incidents
+
+### Top 10 Production Incident Causes
+
+1. **Missing version increment** → index changes silently ignored
+2. **`reindex=true` in code** → reindex on every deployment (performance killer)
+3. **`includedPaths=["/"]`** → indexes entire repository (write amplification)
+4. **Missing `evaluatePathRestrictions`** → queries scan all paths regardless of restrictions
+5. **Missing `filter.xml` entry** → index not packaged in deployment
+6. **Missing `allowIndexDefinitions=true`** → FileVault rejects the package
+7. **New custom index on `dam:Asset` or `cq:Page`** → query planner interference risk
+8. **Missing Tika node on `damAssetLucene` customization** → binary extraction config lost
+9. **`ordered=true` on high-cardinality properties** → severe write throughput degradation
+10. **Overuse of `nodeScopeIndex=true`** → massive index bloat
+
+### Silent Failure Scenarios
+- **Wrong naming convention** → CM doesn't detect the index, old version stays active
+- **Missing `async` property** → index created but never populated
+- **`sync` async mode** → index silently ignored on AEMaaCS
+- **Custom analyzer** → index fails to initialize, falls back to traversal
+- **`useInSimilarity=true`** → property silently ignored
+
+---
+
+## Debugging & Diagnostic Tools
+
+### Query Performance Tool
+- Path: `/libs/granite/operations/content/diagnosistools/queryPerformance.html`
+- Shows slow/popular queries
+- `EXPLAIN` reveals which index is selected and why
+- If plan shows `/* traverse */` → query not using an index
+
+### Developer Console
+- Available in AEMaaCS for query analysis
+- Download Oak Index status: Status Dump → Oak Indexes → JSON
+- Compare intended vs. actual index state
+
+### Index Definition Analyzer
+- URL: `https://opensource.adobe.com/aem-index-definition-analyzer/`
+- Compares your definition with current state
+- Identifies format issues for diff-based updates
+
+### JMX MBeans (Local SDK only)
+- `IndexStats` MBean: check async/nrt lane status
+- `LastIndexedTime` not updating → index may be stuck
+- Stale > 45 minutes → investigate async indexer logs
+
+### Debug Logging
+- `org.apache.jackrabbit.oak.query` → DEBUG
+- Shows cost calculation for each index
+- Shows which index was selected and why
+- `org.apache.jackrabbit.oak.plugins.index` → DEBUG for indexing issues
+
+---
+
+## Cost Tuning Properties
+
+| Property | Type | Effect | When to Use |
+|----------|------|--------|-------------|
+| `entryCount` | Long | Overrides estimated numDocs | When planner consistently miscalculates (last resort) |
+| `costPerEntry` | Double | Multiplier per entry | Make index appear more/less expensive |
+| `costPerExecution` | Double | Fixed overhead per query | Penalize/favor index regardless of data |
+| `evaluatePathRestrictions` | Boolean | Enables path factor in cost | **Always set to true** |
+
+### Warning
+- Cost tuning is a **last resort**
+- Prefer: optimize query → refine index definition → use index tags → cost tuning
+- These values are fragile — may break if data patterns change
+- Adobe may adjust OOTB cost values in platform updates
+
+---
+
+## Community Lessons Learned
+
+### Lesson 1: Always Copy from Production
+> "I spent days debugging why my custom index wasn't being selected. Turns out the OOTB index version in my local SDK was different from production. Always download the current definition from your Cloud environment."
+
+### Lesson 2: Version Bumps are Non-Negotiable
+> "Changed properties in my index definition but forgot to bump the custom version. Deployed 3 times before realizing CM was silently using the old index."
+
+### Lesson 3: filter.xml is Easy to Forget
+> "Index definition was perfect, pom.xml had allowIndexDefinitions, but I forgot the filter.xml entry. Package deployed successfully but the index simply didn't exist."
+
+### Lesson 4: Don't Trust Local SDK for Performance Testing
+> "Index worked great locally but caused 30-second queries in Stage. The local SDK has far fewer nodes — always test with realistic data volumes."
+
+### Lesson 5: Tika is Different in Cloud
+> "Spent a week building a custom tika-config.xml for damAssetLucene. Works perfectly locally, has zero effect in AEMaaCS because Asset Compute handles extraction."
+
+### Lesson 6: ordered=true is a Double-Edged Sword
+> "Added ordered=true to 8 properties for flexible sorting. Write throughput dropped 40%. Only use ordered for properties you ACTUALLY sort on in production queries."
+
+### Lesson 7: Monitor Async Indexer Health
+> "IndexStats showed LastIndexedTime was 3 hours old. The async indexer was stuck. New content wasn't appearing in search. Restart of the background thread fixed it."
+
+---
+
+## 15. Local Validation & Unit Testing Approaches
+
+### Local SDK "reindex=false" Trap
+When strictly following AEMaaCS rules (where `reindex="{Boolean}false"` is required in code), deploying a completely new custom index (like `cqPageLucene-10-custom-1`) to a Local SDK can result in the Oak Query Optimizer ignoring the index.
+- **Why this happens:** AEMaaCS Cloud Manager automatically uses a blue/green pipeline to build the index asynchronously. In the Local SDK, deploying `reindex=false` creates the node but defers building the Lucene segment.
+- **Result:** The `IndexPlanner` views the newly deployed index as inactive and falls back to the OOTB index (e.g., `cqPageLucene`). 
+- **The Local Fix:** Deploy the code, open CRXDE Lite, change `reindex` to `true`, and save. Jackrabbit Oak will instantly consume the flag, build the index, and reset the flag to `false`.
+
+### The Sparse Index Cost Math (Cost = 0)
+When evaluating queries using `IS NOT NULL` on custom properties:
+- Lucene inverted indexes are strictly sparse. If 0 nodes have the property `Bhuwan`, the index contains 0 entries.
+- The `IndexPlanner` evaluates OOTB `cqPageLucene` path restrictions (e.g., cost ~700) versus the custom index property cost (cost = 0). 
+- Oak mathematically favors 0 over 700. If an index provides a `0` cost, the query will definitively utilize that index.
+
+### JUnit 5 / AEM Mocks Index Proofing
+Attempting to run a real in-memory Oak query engine via `ResourceResolverType.JCR_OAK` (using `org.apache.sling.testing.sling-mock-oak`) frequently catastrophically clashes with legacy `Guava` versions pinned in AEM `core` POMs (`NoSuchMethodError: Stopwatch.createStarted()`).
+
+**The 2-Layer "Architecturally Honest" Solution:**
+1. **Layer 1 (Compile-time definition validation):** Use `DocumentBuilderFactory` to load the `.content.xml` directly in your JUnit `@BeforeEach` and write assertions against the 30+ Guardian rules (`compatVersion=2`, `reindex=false`, `async=[async]`, NO `elastic-async`).
+2. **Layer 2 (JCR Abstract Structure Proof):** Use `ResourceResolverType.RESOURCERESOLVER_MOCK` or `JCR_MOCK` to build the mocked content hierarchy (`page.getContentResource().adaptTo(ModifiableValueMap.class)`). Prove that the JCR structure built by components identically matches the paths requested by the index property definitions (e.g. `jcr:content/Bhuwan`), deferring final `IndexPlanner` execution proof to the Local SDK integration phase.
+
+---
+
+## 16. Cloud-Safe Analyzer Composition (CJK & Advanced)
+
+### The "Custom Analyzer" Paradox in AEMaaCS
+Adobe documentation heavily warns: **"Custom Analyzers are NOT supported in AEM as a Cloud Service."**
+- **What is NOT Supported:** Writing a custom Java `Analyzer` class, packing it into an OSGi bundle, and deploying it to the Oak JVM classpath. AEMaaCS heavily restricts custom Java execution in the indexing layer.
+- **What IS Supported (Composition):** Using OOTB Apache Lucene factories to *compose* complex analyzer pipelines purely via XML. This allows you to recreate virtually any custom behavior by stringing together native Lucene Tokenizers and Filters.
+
+### CJK and Word Delimiter: The Modern Cloud Approach
+When migrating legacy AEM 6.5 CJK analyzer setups to AEMaaCS, two major Lucene classes have been **deprecated** in modern Lucene versions (which Oak strictly enforces):
+1. `CJKTokenizerFactory` (Deprecated) → Replaced by `StandardTokenizer` + `CJKWidthFilter` + `CJKBigramFilter`.
+2. `WordDelimiterFilter` (Deprecated) → Replaced by `WordDelimiterGraphFilter` (fixes positional offset bugs).
+
+**To configure a CJK-aware index that safely delimits words in AEMaaCS, build the following JCR structure (`cqPageLucene-custom.content.xml`):**
+
+```xml
+<analyzers jcr:primaryType="nt:unstructured">
+    <!-- Define the "default" analyzer -->
+    <default jcr:primaryType="nt:unstructured">
+        
+        <!-- STEP 1: Standard Tokenizer (Do NOT use CJKTokenizer) -->
+        <tokenizer 
+            jcr:primaryType="nt:unstructured" 
+            name="Standard"/> 
+            
+        <filters jcr:primaryType="nt:unstructured">
+            <!-- STEP 2: CJK Width Normalization (Fullwidth/Halfwidth handling) -->
+            <CJKWidth jcr:primaryType="nt:unstructured" name="CJKWidth"/>
+            <LowerCase jcr:primaryType="nt:unstructured" name="LowerCase"/>
+            
+            <!-- STEP 3: Modern Word Delimiting (Replaces legacy WordDelimiterFilter) -->
+            <WordDelimiterGraph 
+                jcr:primaryType="nt:unstructured" 
+                name="WordDelimiterGraph"
+                generateWordParts="1"
+                generateNumberParts="1"
+                catenateWords="1"
+                catenateNumbers="1"
+                catenateAll="0"
+                splitOnCaseChange="1"/>
+                
+            <!-- STEP 4: CJK Bigram formation (The modern engine for CJK) -->
+            <CJKBigram jcr:primaryType="nt:unstructured" name="CJKBigram"/>
+        </filters>
+    </default>
+</analyzers>
+```
+
+### Critical Composition Rules
+- **Name Resolution**: The `name` property on tokenizers and filters perfectly matches the Lucene class prefix by dropping `Factory` (e.g., `org.apache.lucene.analysis.cjk.CJKBigramFilterFactory` becomes `name="CJKBigram"`).
+- **Order Matters**: The XML node sorting under `filters/` dictates the token stream pipeline order.
+- **Property Arguments**: You can pass raw parameters directly as properties (e.g., `generateWordParts="1"` becomes the boolean arguments for the `WordDelimiterGraphFilterFactory`).
