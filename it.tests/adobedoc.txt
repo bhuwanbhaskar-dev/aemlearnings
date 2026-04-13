@@ -26,10 +26,6 @@ AEM as a Cloud Service strictly controls index deployments via Cloud Manager pip
 - **When is `excludedPaths` actually useful?** It is ONLY useful when you want to punch a hole *inside* your included path. For example, if your included path is `/content/site`, but you want to exclude `/content/site/archive-folder`.
 - **The Fix:** Completely delete the `excludedPaths` property.
 
-### 3. The `async="[async,nrt]"` Official Standard
-- **The Issue & Official Docs:** The index uses Near Real-Time (`nrt`) indexing alongside standard `async`. According to official Adobe AEMaaCS documentation, `[async,nrt]` is a fully supported and valid configuration. 
-- **The Architect's Caveat:** While officially supported, `nrt` uses a "copy-on-read" memory mapping so content becomes searchable instantly before the background async job finishes. This consumes higher IOPS and memory. 
-- **The Fix:** If the client's business requirement demands that editors instantly see new cos-guides in search results the second they hit 'Publish', keep `[async,nrt]`. If it's a standard website where a 30-60 second indexing delay is perfectly acceptable, dropping it back down to `async="[async]"` will save compute resources.
 
 ---
 
@@ -51,10 +47,12 @@ The way an index harvests node data (the write path) determines its storage foot
   - *The 100-Level Wildcard approach:* You are telling the indexer "Check the house, check every room, check every cabinet, open every drawer, check inside every box inside every drawer..." It takes massive amounts of energy and time.
   - *The Specific Component approach:* You tell the indexer, "Only check inside the 'Text Component' drawers (`path="jcr:content/root/container/text"`)." This focuses the indexer's energy exactly where the text actually lives, keeping the index incredibly small and lightning fast!
 
-### 2. The Global Regex Property Trap (`name=".*"`)
+### 2. The Global Regex Property (`name=".*"`)
 - **The Issue:** Inside the `properties` definition, the `allProps` node specifies `name=".*" isRegexp="true" nodeScopeIndex="true" analyzed="true"`.
-- **The Impact:** Coupled with the 100-level wildcard aggregation, this instructs Lucene to tokenize **every single string property imaginable** across the entire page hierarchy. System properties, authoring metadata, Sling resource types, and hidden JSON blob strings will all be broken down and indexed for full-text search.
-- **The Fix:** Limit `nodeScopeIndex` to highly specific text fields (like `text`, `jcr:title`, `jcr:description`), or dramatically reduce the aggregation depth so you aren't indexing system configuration strings.
+- **The Impact:** On its own, this is the standard Oak mechanism to enable global full-text search (`jcr:contains`). However, when mathematically multiplied by the 100-level wildcard aggregation, it turns into a **Regex Bomb**. It instructs Lucene to tokenize every single string property imaginable across that infinite 100-level page hierarchy. Hidden JSON blobs, base64 strings, and system component IDs all get tokenized and dumped into the search index.
+- **The Fix:** What is the actual business purpose of this custom index? 
+  - **Scenario A (It's a Full-Text Search Index):** If the client uses this to power a site-wide "Search Bar", you **must keep** the `allProps` block so `jcr:contains` works. However, you must absolutely prune the `<cq:PageContent>` `<aggregates>` down to 3 levels to prevent it from tokenizing system garbage.
+  - **Scenario B (It's a Metadata Filtering Index):** If the client only uses this index to populate specific component dropdowns (e.g. querying strictly by `businessL1` or `documentType`), then **delete `allProps` completely**. It is completely wasted overhead if they aren't performing global full-text keyword searches.
 
 ---
 
@@ -65,12 +63,11 @@ The Oak `IndexPlanner` relies on strict path scoping and node constraints to min
 > [!TIP]
 > **Storage Waste Detected**
 
-### 1. The Asymmetric Query/Included Path
-- **The Issue:** 
-  - `includedPaths="[/content/jpm-cp/cos-guides]"`
+### 1. Excellent Path Scope Fencing
+- **The Positive:** 
+  - `includedPaths="[/content/jpm-cp/gb/cos-guides]"`
   - `queryPaths="[/content/jpm-cp/gb/cos-guides]"`
-- **The Impact:** `includedPaths` dictates what is physically stored in the Lucene data segments. `queryPaths` dictates what the Index Planner is allowed to answer. By making `includedPaths` broader than `queryPaths`, the client is paying the massive CPU and storage tax to index the *entire* global region hierarchy (`/content/jpm-cp/cos-guides`), but restricting the index so it can only ever fulfill queries for Great Britain (`/gb/`).
-- **The Fix:** If this index is genuinely only used for GB searches, change `includedPaths` to exactly match `queryPaths="[/content/jpm-cp/gb/cos-guides]"`. This will instantly reduce indexing time and storage volume by the percentage of non-GB regions. If other regions need this index, adjust `queryPaths` to root `/content/jpm-cp/cos-guides`.
+- **The Strategy:** The client has perfectly aligned the `includedPaths` (what Oak stores physically) with the `queryPaths` (what Oak answers). By explicitly scoping this index only to the deeply nested `gb` region, they ensure they are only paying the storage and CPU tax for Great Britain. This prevents the index from accidentally vacuuming up global data. This is textbook AEM index isolation best practice, especially with `evaluatePathRestrictions="{Boolean}true"` enabled!
 
 ### 2. Excellent Metadata Categorization (Providing the "Wow" factor)
 - **The Positive:** The configuration properly declares `propertyIndex="{Boolean}true"` for critical taxonomy fields like `businessSection`, `businessL1` through `businessL4`, and `docstate` without unnecessary full-text analysis. It also correctly types `hideInNav` as a `Boolean`. 
@@ -83,10 +80,9 @@ The Oak `IndexPlanner` relies on strict path scoping and node constraints to min
 To migrate this index safely and performantly to AEMaaCS, provide the client with this optimized blueprint:
 
 1. **Delete the Aggregation Bomb:** Remove `<include 6>` through `<include 100>`. Either cap it at `<include 5>` or replace it with targeted component paths (e.g., `path="jcr:content/root/container/*"`).
-2. **Align the Scope:** Change `includedPaths` to perfectly match `queryPaths` (`[/content/jpm-cp/gb/cos-guides]`), or vice-versa, to ensure you are only paying for the storage you actually query.
-3. **Delete Garbage Properties:** Remove `excludedPaths` entirely because those paths fall outside the included directory structure anyway.
-4. **Delete the Reindex Threat:** Remove `reindex="{Boolean}true"` completely from the index definition.
-5. **Delete the Regex Bomb:** Remove the `allProps` (`name=".*"`) wildcard from the `properties` block to stop indexing hidden JSON authoring strings, improving index speed.
+2. **Delete Garbage Properties:** Remove `excludedPaths` entirely because those paths fall outside the included directory structure anyway.
+3. **Delete the Reindex Threat:** Remove `reindex="{Boolean}true"` completely from the index definition.
+4. **Defuse the Regex Bomb:** If this index is only for metadata dropdown filters (Scenario B), delete the `allProps` (`name=".*"`) wildcard block entirely. If it's for full site search (Scenario A), keep it, but ensure step 1 (Aggregation limits) is strictly followed to prevent it from tokenizing system JSON configurations.
 
 ---
 
