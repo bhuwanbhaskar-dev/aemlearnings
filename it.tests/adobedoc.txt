@@ -1,19 +1,15 @@
-Adobe Summit 2026 is currently underway (April 19–22 in Las Vegas). Please use the exact registration link below:
-Register here: https://reg.adobe.com/flow/adobe/as26/SummitReg/login
-Once registered, please check the full session list and pick the ones that best suit your time zone and match your interests.
-Additionally, look for the exact sessions suggested by Divanshu Goyal (for Indian users):
-𝗠𝗼𝗻 𝟭𝟭:𝟯𝟬 𝗣𝗠 𝗜𝗦𝗧 — 𝗢𝗦𝟯𝟯𝟲 𝗔𝗴𝗲𝗻𝘁𝗶𝗰 𝗜𝗻𝗻𝗼𝘃𝗮𝘁𝗶𝗼𝗻𝘀 𝗶𝗻 𝗔𝗘𝗠 15 minutes. Haresh Kumar and Cedric Huesler. The clearest signal of where AEM is heading this year.
-𝗧𝘂𝗲 𝟵:𝟯𝟬 𝗣𝗠 𝗜𝗦𝗧 — 𝗗𝗮𝘆 𝗧𝘄𝗼 𝗞𝗲𝘆𝗻𝗼𝘁𝗲 Anil Chakravarthy on CX Orchestration. The only mainstage keynote at a civilised Indian hour, and historically the one with the clearest roadmap signal for AEM and Experience Cloud.
-𝗪𝗲𝗱 𝟲:𝟯𝟬 𝗔𝗠 𝗜𝗦𝗧 — 𝗦𝗻𝗲𝗮𝗸𝘀 One hour, hosted by Iliza Shlesinger. Adobe Labs showing experimental work. This is the only session that doesn't get a polished replay — the energy lives in the live hour. Worth the early alarm.
-That's it. Three alarms.
-𝗦𝘁𝗲𝗽 𝟯 — 𝗕𝗼𝗼𝗸𝗺𝗮𝗿𝗸 𝗳𝗼𝘂𝗿 𝘀𝗲𝘀𝘀𝗶𝗼𝗻𝘀 𝗳𝗼𝗿 𝗹𝗮𝘁𝗲𝗿
-Recordings land on Experience League over the 2–6 weeks after Summit. Bookmark the session pages now; the same URLs update with recordings.
-If you only watch four, make them these.
-𝗙𝗼𝗿 𝗮𝗿𝗰𝗵𝗶𝘁𝗲𝗰𝘁𝘀 𝗮𝗻𝗱 𝗱𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿𝘀:
-• 𝗦𝟯𝟯𝟯 — Developer Innovations in AEM Cloud Service. Where the MCP and agent-orchestration plumbing gets explained by the people building it.
-• 𝗦𝟯𝟮𝟮 — Agentic DAM at Scale: Automate, Govern, Optimize. Governance angle the community has barely started having.
-𝗙𝗼𝗿 𝗱𝗲𝗲𝗽𝗲𝗿 𝗰𝗼𝗻𝘁𝗲𝘅𝘁:
-• 𝗦𝟯𝟮𝟭 — Agentic Innovations in AEM. The 60-minute version of OS336, same speakers.
-• 𝗦𝟯𝟯𝟬 — AEM Rockstar 10th Anniversary. Community-voted; recording availability unclear but worth checking.
-(Full list of 12 AEM-relevant breakouts in comments if you want to go deeper.)
-Let me know if you need any help shortlisting sessions or have questions. Looking forward to your thoughts!
+AEM Embracing the Agentic Web as Core Strategy
+Why: Over the past 10 months Adobe has quietly shipped MCP servers for AEM Content & Cloud Manager, AI agents for Sites/Assets/Performance, Edge Functions at the CDN layer, and the LLM Optimizer for AI visibility. These are not isolated features — they form the foundation of a unified vision: turning AEM into a platform that serves both human visitors and AI agents equally well.What it means for our team – Machine-First Content Design:
+Content models must now prioritize machine readability alongside author convenience. Ignoring Generative Engine Optimization (GEO) risks our content becoming invisible in AI-generated answers.
+AEM Agents Moving from Beta to Production-Ready
+Why: The AEM Agents beta (live since late 2025) has matured with 7+ purpose-built agents. Summit is the logical moment for Adobe to declare them production-ready and showcase real operational demos (content audits, performance checks, migration assessments). Competitive pressure from other vendors is also accelerating the timeline.What it means for our team – Operational Task Automation:
+We should start evaluating which day-to-day operational work can be safely handed over to agents; early adopters in the beta will gain immediate advantage.
+Edge Delivery Services Becomes the Default Recommendation
+Why: Adobe is steadily shifting its messaging from “EDS is one option” to “EDS is the recommended starting point for new projects.” Strong Lighthouse scores, faster time-to-launch via document-based authoring, and solid enterprise case studies (e.g., HanesBrands) back this direction. Traditional AEM Sites stays for complex cases, but EDS is now the default path.What it means for our team – Architecture Decision Priority:
+Architects must build EDS skills immediately. The key 2026 question becomes “EDS vs classic Sites,” and teams need proficiency in vanilla JS, blocks, and document-based authoring.
+Unified Content Supply Chain Dashboard
+Why: Adobe has spent three years acquiring and integrating tools across the content lifecycle. A single dashboard connecting Workfront → GenStudio/Firefly → AEM Assets/Content Hub → AEM Sites/EDS → Analytics is now ready to be showcased, supported by strong ROI data from Forrester.What it means for our team – End-to-End Content Lifecycle View:
+AEM is no longer viewed as “just the CMS” — it is one piece of a broader supply chain. We must start thinking upstream (planning/creative) and downstream (analytics/personalization).
+AEM 6.5 EOL Push with Enhanced Migration Tools
+Why: The AEM 6.5 Managed Service end-of-life date is 31 August 2026 (just 134 days after Summit). Adobe will use the event to remind customers and announce improved migration tooling — possibly including an AI-powered assessment agent — to accelerate remaining on-prem/cloud migrations and protect recurring revenue.What it means for our team – Migration Urgency:
+Any remaining 6.5 work can no longer be delayed. New tooling may cut migration effort by 20–30 %, making migration expertise one of the most valuable AEM skills for the next 12 months.
