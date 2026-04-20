@@ -1,99 +1,19 @@
-# Architectural Analysis: `jpmcp.cos-guides-1-custom-1` Oak Index
-
-This document provides a comprehensive, rigorous analysis of the provided custom Oak index definition. To ensure your high-impact client achieves outstanding performance and absolute stability on AEM as a Cloud Service (AEMaaCS), we have analyzed the index from three distinct architectural angles:
-
-1. **AEMaaCS Deployment & Lifecycle Safety**
-2. **Indexing Performance & Storage Optimization (The "Bloat" Analysis)**
-3. **Query Engine Cost & Scope Efficiency**
-
----
-
-## Angle 1: AEMaaCS Deployment & Lifecycle Safety
-
-AEM as a Cloud Service strictly controls index deployments via Cloud Manager pipelines. This index contains configurations derived from On-Premise (AEM 6.5) practices that will directly threaten pipeline success and repository stability.
-
-> [!WARNING]
-> **Critical Blockers Detected**
-
-### 1. The `reindex=true` Deployment Trap
-- **The Issue:** Line 12 explicitly contains `reindex="{Boolean}true"`.
-- **The Impact in AEMaaCS:** In Cloud Service, committing `reindex=true` to your Git repository violates strict platform rules (Rule A04). Cloud Manager manages blue/green reindexing automatically based on the `-custom-<version>` suffix change. If this code passes the `aem-analyzer-plugin` quality gate, it will force a catastrophic, blocking repository reindex operation on **every single production deployment**, delaying releases by hours and maxing out CPU.
-- **The Fix:** Completely **DELETE** the `reindex` property. You do not even need to set it to `false`. AEMaaCS handles indexing implicitly via Cloud Manager deployment logic. Removing unused lifecycle properties is a best practice to reduce config noise.
-
-### 2. Nonsensical `excludedPaths` Fencing
-- **The Issue:** `excludedPaths="[/var,/etc/replication,/etc/workflow/instances,/jcr:system]"` 
-- **The Impact:** The index is already explicitly fenced to `/content/jpm-cp/cos-guides` via the `includedPaths` directive. Jackrabbit Oak reads the `includedPaths` first and completely ignores the rest of the repository. Telling it to exclude `/var` or `/etc` is like telling someone who is locked inside a single bedroom not to go into the garage—it's physically impossible anyway. This adds meaningless overhead to the parser.
-- **When is `excludedPaths` actually useful?** It is ONLY useful when you want to punch a hole *inside* your included path. For example, if your included path is `/content/site`, but you want to exclude `/content/site/archive-folder`.
-- **The Fix:** Completely delete the `excludedPaths` property.
-
-
----
-
-## Angle 2: Indexing Performance & Storage Bloat
-
-The way an index harvests node data (the write path) determines its storage footprint and the CPU tax paid by the AEM background indexer. This index contains a "Nuclear Aggregation Bomb."
-
-> [!CAUTION]
-> **Severe CPU & Memory Tax Detected**
-
-### 1. The 100-Level Wildcard Aggregation Bomb
-- **The Issue:** The `<cq:PageContent>` aggregation node recursively requests `path="*"` down to *100 levels deep* (`*/*/*/*...`).
-- **The Impact:** Aggregation tells Oak: *"Anytime any node changes, crawl the entire exponential tree to roll full-text data up to the parent."* Using wildcards (`*`) for 100 levels turns the Oak indexer into a recursive nightmare. 
-  - **Storage:** It forces every single configuration, layout, base64 image string, component ID, and dialog property residing in those 100 levels to be copied into the Lucene Document. 
-  - **Processing:** This exponentially increases write-amplification, burns CPU cycles on authoring instances, and routinely causes `OutOfMemory` (OOM) crashes in the async indexing threads.
-- **The Fix:** Radically prune this. AEM best practices dictate a maximum of **3 to 5 levels** of path aggregation. 
-  
-  **Beginner Friendly Explanation:** Imagine your AEM page is a house. You want the Oak Indexer to find the word "Apple". 
-  - *The 100-Level Wildcard approach:* You are telling the indexer "Check the house, check every room, check every cabinet, open every drawer, check inside every box inside every drawer..." It takes massive amounts of energy and time.
-  - *The Specific Component approach:* You tell the indexer, "Only check inside the 'Text Component' drawers (`path="jcr:content/root/container/text"`)." This focuses the indexer's energy exactly where the text actually lives, keeping the index incredibly small and lightning fast!
-
-### 2. The Global Regex Property (`name=".*"`)
-- **The Issue:** Inside the `properties` definition, the `allProps` node specifies `name=".*" isRegexp="true" nodeScopeIndex="true" analyzed="true"`.
-- **The Impact:** On its own, this is the standard Oak mechanism to enable global full-text search (`jcr:contains`). However, when mathematically multiplied by the 100-level wildcard aggregation, it turns into a **Regex Bomb**. It instructs Lucene to tokenize every single string property imaginable across that infinite 100-level page hierarchy. Hidden JSON blobs, base64 strings, and system component IDs all get tokenized and dumped into the search index.
-- **The Fix:** What is the actual business purpose of this custom index? 
-  - **Scenario A (It's a Full-Text Search Index):** If the client uses this to power a site-wide "Search Bar", you **must keep** the `allProps` block so `jcr:contains` works. However, you must absolutely prune the `<cq:PageContent>` `<aggregates>` down to 3 levels to prevent it from tokenizing system garbage.
-  - **Scenario B (It's a Metadata Filtering Index):** If the client only uses this index to populate specific component dropdowns (e.g. querying strictly by `businessL1` or `documentType`), then **delete `allProps` completely**. It is completely wasted overhead if they aren't performing global full-text keyword searches.
-
----
-
-## Angle 3: Query Engine Cost & Scope Efficiency
-
-The Oak `IndexPlanner` relies on strict path scoping and node constraints to minimize the "cost" of selecting an index to serve a JCR-SQL2 query.
-
-> [!TIP]
-> **Storage Waste Detected**
-
-### 1. Excellent Path Scope Fencing
-- **The Positive:** 
-  - `includedPaths="[/content/jpm-cp/gb/cos-guides]"`
-  - `queryPaths="[/content/jpm-cp/gb/cos-guides]"`
-- **The Strategy:** The client has perfectly aligned the `includedPaths` (what Oak stores physically) with the `queryPaths` (what Oak answers). By explicitly scoping this index only to the deeply nested `gb` region, they ensure they are only paying the storage and CPU tax for Great Britain. This prevents the index from accidentally vacuuming up global data. This is textbook AEM index isolation best practice, especially with `evaluatePathRestrictions="{Boolean}true"` enabled!
-
-### 2. Excellent Metadata Categorization (Providing the "Wow" factor)
-- **The Positive:** The configuration properly declares `propertyIndex="{Boolean}true"` for critical taxonomy fields like `businessSection`, `businessL1` through `businessL4`, and `docstate` without unnecessary full-text analysis. It also correctly types `hideInNav` as a `Boolean`. 
-- **The Strategy:** This highly structured approach to `cq:Page` properties ensures that programmatic filtering, faceted search, and component list building will execute via discrete, lightning-fast equality checks rather than parsing full-text graphs. This part of the index is exceptionally well-architected for component dialog dropdowns.
-
----
-
-## Final Refactoring Recommendation
-
-To migrate this index safely and performantly to AEMaaCS, provide the client with this optimized blueprint:
-
-1. **Delete the Aggregation Bomb:** Remove `<include 6>` through `<include 100>`. Either cap it at `<include 5>` or replace it with targeted component paths (e.g., `path="jcr:content/root/container/*"`).
-2. **Delete Garbage Properties:** Remove `excludedPaths` entirely because those paths fall outside the included directory structure anyway.
-3. **Delete the Reindex Threat:** Remove `reindex="{Boolean}true"` completely from the index definition.
-4. **Defuse the Regex Bomb:** If this index is only for metadata dropdown filters (Scenario B), delete the `allProps` (`name=".*"`) wildcard block entirely. If it's for full site search (Scenario A), keep it, but ensure step 1 (Aggregation limits) is strictly followed to prevent it from tokenizing system JSON configurations.
-
----
-
-## References & Official Documentation
-
-To validate the architectural recommendations in this report, please refer to the official platform documentation:
-
-1. **AEMaaCS Content Search and Indexing Rules:** 
-   [Experience League: Content Search and Indexing in AEM as a Cloud Service](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/operations/indexing)
-   *(Reference for `reindex` deprecation, `async` limits, and Cloud Manager index deployment pipelines).*
-
-2. **Jackrabbit Oak Lucene Index Architecture:**
-   [Apache Jackrabbit Oak Docs: Lucene Indexing](https://jackrabbit.apache.org/oak/docs/query/lucene.html)
-   *(Reference for `queryPaths` vs `includedPaths` behavior, proper Regex Property definitions, and Aggregation memory warnings).*
+Adobe Summit 2026 is currently underway (April 19–22 in Las Vegas). Please use the exact registration link below:
+Register here: https://reg.adobe.com/flow/adobe/as26/SummitReg/login
+Once registered, please check the full session list and pick the ones that best suit your time zone and match your interests.
+Additionally, look for the exact sessions suggested by Divanshu Goyal (for Indian users):
+𝗠𝗼𝗻 𝟭𝟭:𝟯𝟬 𝗣𝗠 𝗜𝗦𝗧 — 𝗢𝗦𝟯𝟯𝟲 𝗔𝗴𝗲𝗻𝘁𝗶𝗰 𝗜𝗻𝗻𝗼𝘃𝗮𝘁𝗶𝗼𝗻𝘀 𝗶𝗻 𝗔𝗘𝗠 15 minutes. Haresh Kumar and Cedric Huesler. The clearest signal of where AEM is heading this year.
+𝗧𝘂𝗲 𝟵:𝟯𝟬 𝗣𝗠 𝗜𝗦𝗧 — 𝗗𝗮𝘆 𝗧𝘄𝗼 𝗞𝗲𝘆𝗻𝗼𝘁𝗲 Anil Chakravarthy on CX Orchestration. The only mainstage keynote at a civilised Indian hour, and historically the one with the clearest roadmap signal for AEM and Experience Cloud.
+𝗪𝗲𝗱 𝟲:𝟯𝟬 𝗔𝗠 𝗜𝗦𝗧 — 𝗦𝗻𝗲𝗮𝗸𝘀 One hour, hosted by Iliza Shlesinger. Adobe Labs showing experimental work. This is the only session that doesn't get a polished replay — the energy lives in the live hour. Worth the early alarm.
+That's it. Three alarms.
+𝗦𝘁𝗲𝗽 𝟯 — 𝗕𝗼𝗼𝗸𝗺𝗮𝗿𝗸 𝗳𝗼𝘂𝗿 𝘀𝗲𝘀𝘀𝗶𝗼𝗻𝘀 𝗳𝗼𝗿 𝗹𝗮𝘁𝗲𝗿
+Recordings land on Experience League over the 2–6 weeks after Summit. Bookmark the session pages now; the same URLs update with recordings.
+If you only watch four, make them these.
+𝗙𝗼𝗿 𝗮𝗿𝗰𝗵𝗶𝘁𝗲𝗰𝘁𝘀 𝗮𝗻𝗱 𝗱𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿𝘀:
+• 𝗦𝟯𝟯𝟯 — Developer Innovations in AEM Cloud Service. Where the MCP and agent-orchestration plumbing gets explained by the people building it.
+• 𝗦𝟯𝟮𝟮 — Agentic DAM at Scale: Automate, Govern, Optimize. Governance angle the community has barely started having.
+𝗙𝗼𝗿 𝗱𝗲𝗲𝗽𝗲𝗿 𝗰𝗼𝗻𝘁𝗲𝘅𝘁:
+• 𝗦𝟯𝟮𝟭 — Agentic Innovations in AEM. The 60-minute version of OS336, same speakers.
+• 𝗦𝟯𝟯𝟬 — AEM Rockstar 10th Anniversary. Community-voted; recording availability unclear but worth checking.
+(Full list of 12 AEM-relevant breakouts in comments if you want to go deeper.)
+Let me know if you need any help shortlisting sessions or have questions. Looking forward to your thoughts!
