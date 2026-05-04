@@ -1,2 +1,9 @@
-index="107443" host="jpmc-cib-prod-dispatcher*" sourcetype="/mnt/var/log/httpd/access_log" "getJPMALocaleContent"
-| stats count by _raw
+sudo vi /etc/httpd/conf.d/rewrites/jpmc_publish_internal_rewrites.rules
+
+Press i -> Paste your rules -> Press Esc -> Type :wq -> Press Enter
+
+sudo apachectl configtest
+
+sudo rm -rf /mnt/var/www/html/jpmcp-cm/graphql/execute.json/jpm-cp/getJPMALocaleContent*
+
+sudo apachectl graceful
