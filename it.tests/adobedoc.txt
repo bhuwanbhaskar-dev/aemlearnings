@@ -1,5 +1,2 @@
-index="107443" host="jpmc-cib-prod-dispatcher*" sourcetype="/mnt/var/log/httpd/access_log" 
-| where LIKE(_raw, "%graphql/execute.json/%") AND (LIKE(_raw, "%;%") OR LIKE(_raw, "%%3B%"))
-| rex field=_raw "execute\.json/jpm-cp/(?<endpoint>[^;%?/\s]+)"
-| stats count as total_hits by endpoint
-| sort - total_hits
+index="107443" host="jpmc-cib-prod-dispatcher*" sourcetype="/mnt/var/log/httpd/access_log" "getJPMALocaleContent"
+| stats count by _raw
