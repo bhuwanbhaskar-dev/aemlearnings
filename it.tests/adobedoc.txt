@@ -1,11 +1,8 @@
 # Exclude DCB specific GraphQL Persisted queries from caching due to unencoded payload errors
 RewriteCond %{QUERY_STRING} ![\:\/\.\~]
-RewriteCond %{REQUEST_URI} !^/jpm-cp/ArticleByCategoryAndKeyword
-RewriteCond %{REQUEST_URI} !^/jpm-cp/ArticleByPath
-RewriteCond %{REQUEST_URI} !^/jpm-cp/GlossaryTermByCategoryAndKeyword
-RewriteCond %{REQUEST_URI} !^/jpm-cp/GlossaryTermByPath
+RewriteCond %{REQUEST_URI} !/jpm-cp/ArticleByCategoryAndKeyword
+RewriteCond %{REQUEST_URI} !/jpm-cp/ArticleByPath
+RewriteCond %{REQUEST_URI} !/jpm-cp/GlossaryTermByCategoryAndKeyword
+RewriteCond %{REQUEST_URI} !/jpm-cp/GlossaryTermByPath
 RewriteCond %{REQUEST_URI} ^/jpmcp-cm/graphql/execute.json
 RewriteRule ^/(.*)$ /$1;.json [PT]
-
-Dispatcher evaluates "wildcard" rules on every single page load, adding sloppy search patterns slows down the entire website. Since we are only executing an exclusion check (!) and never using that captured variable in a subsequent rule, this is a pure CPU waste.
-(!/jpm-cp/ArticleByCategoryAndKeyword) is a pure substring match. It is the fastest, leanest, and most computationally efficient way to tell Apache to exclude a specific URI path.
