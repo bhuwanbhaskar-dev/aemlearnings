@@ -1,8 +1,5 @@
-# Exclude DCB specific GraphQL Persisted queries from caching due to unencoded payload errors
-RewriteCond %{QUERY_STRING} ![\:\/\.\~]
-RewriteCond %{REQUEST_URI} !/jpm-cp/ArticleByCategoryAndKeyword
-RewriteCond %{REQUEST_URI} !/jpm-cp/ArticleByPath
-RewriteCond %{REQUEST_URI} !/jpm-cp/GlossaryTermByCategoryAndKeyword
-RewriteCond %{REQUEST_URI} !/jpm-cp/GlossaryTermByPath
-RewriteCond %{REQUEST_URI} ^/jpmcp-cm/graphql/execute.json
-RewriteRule ^/(.*)$ /$1;.json [PT]
+index="107443" host="jpmc-cib-prod-dispatcher*" sourcetype="/mnt/var/log/httpd/access_log" 
+| where LIKE(_raw, "%graphql/execute.json/%") AND (LIKE(_raw, "%;%") OR LIKE(_raw, "%%3B%"))
+| rex field=_raw "execute\.json/jpm-cp/(?<endpoint>[^;%?/\s]+)"
+| stats count as total_hits by endpoint
+| sort - total_hits
