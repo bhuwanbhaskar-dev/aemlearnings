@@ -1,15 +1,11 @@
-AEM Embracing the Agentic Web as Core Strategy
-Why: Over the past 10 months Adobe has quietly shipped MCP servers for AEM Content & Cloud Manager, AI agents for Sites/Assets/Performance, Edge Functions at the CDN layer, and the LLM Optimizer for AI visibility. These are not isolated features — they form the foundation of a unified vision: turning AEM into a platform that serves both human visitors and AI agents equally well.What it means for our team – Machine-First Content Design:
-Content models must now prioritize machine readability alongside author convenience. Ignoring Generative Engine Optimization (GEO) risks our content becoming invisible in AI-generated answers.
-AEM Agents Moving from Beta to Production-Ready
-Why: The AEM Agents beta (live since late 2025) has matured with 7+ purpose-built agents. Summit is the logical moment for Adobe to declare them production-ready and showcase real operational demos (content audits, performance checks, migration assessments). Competitive pressure from other vendors is also accelerating the timeline.What it means for our team – Operational Task Automation:
-We should start evaluating which day-to-day operational work can be safely handed over to agents; early adopters in the beta will gain immediate advantage.
-Edge Delivery Services Becomes the Default Recommendation
-Why: Adobe is steadily shifting its messaging from “EDS is one option” to “EDS is the recommended starting point for new projects.” Strong Lighthouse scores, faster time-to-launch via document-based authoring, and solid enterprise case studies (e.g., HanesBrands) back this direction. Traditional AEM Sites stays for complex cases, but EDS is now the default path.What it means for our team – Architecture Decision Priority:
-Architects must build EDS skills immediately. The key 2026 question becomes “EDS vs classic Sites,” and teams need proficiency in vanilla JS, blocks, and document-based authoring.
-Unified Content Supply Chain Dashboard
-Why: Adobe has spent three years acquiring and integrating tools across the content lifecycle. A single dashboard connecting Workfront → GenStudio/Firefly → AEM Assets/Content Hub → AEM Sites/EDS → Analytics is now ready to be showcased, supported by strong ROI data from Forrester.What it means for our team – End-to-End Content Lifecycle View:
-AEM is no longer viewed as “just the CMS” — it is one piece of a broader supply chain. We must start thinking upstream (planning/creative) and downstream (analytics/personalization).
-AEM 6.5 EOL Push with Enhanced Migration Tools
-Why: The AEM 6.5 Managed Service end-of-life date is 31 August 2026 (just 134 days after Summit). Adobe will use the event to remind customers and announce improved migration tooling — possibly including an AI-powered assessment agent — to accelerate remaining on-prem/cloud migrations and protect recurring revenue.What it means for our team – Migration Urgency:
-Any remaining 6.5 work can no longer be delayed. New tooling may cut migration effort by 20–30 %, making migration expertise one of the most valuable AEM skills for the next 12 months.
+# Exclude DCB specific GraphQL Persisted queries from caching due to unencoded payload errors
+RewriteCond %{QUERY_STRING} ![\:\/\.\~]
+RewriteCond %{REQUEST_URI} !^/jpm-cp/ArticleByCategoryAndKeyword
+RewriteCond %{REQUEST_URI} !^/jpm-cp/ArticleByPath
+RewriteCond %{REQUEST_URI} !^/jpm-cp/GlossaryTermByCategoryAndKeyword
+RewriteCond %{REQUEST_URI} !^/jpm-cp/GlossaryTermByPath
+RewriteCond %{REQUEST_URI} ^/jpmcp-cm/graphql/execute.json
+RewriteRule ^/(.*)$ /$1;.json [PT]
+
+Dispatcher evaluates "wildcard" rules on every single page load, adding sloppy search patterns slows down the entire website. Since we are only executing an exclusion check (!) and never using that captured variable in a subsequent rule, this is a pure CPU waste.
+(!/jpm-cp/ArticleByCategoryAndKeyword) is a pure substring match. It is the fastest, leanest, and most computationally efficient way to tell Apache to exclude a specific URI path.
