@@ -1,52 +1,93 @@
-After Entering the Extraction Key in Source CTT – Next Steps
-Once you paste the Extraction Key from CAM into the Source AEM CTT screen, follow these steps:
-1. Fill Migration Set Details
+✅ Here’s clean, simple content for your Confluence page:
 
-Name: Give your migration set a clear name (e.g., Homepage_Migration_May2026)
-Project name: It should auto-link to your CAM project (confirm it’s correct)
+Step 4: Run Ingestion (Import Content to AEM Cloud)
+Ingestion is the final step where content from your Migration Set is moved into your AEM as a Cloud Service instance.
+How to Start Ingestion
 
-2. Set Parameters
+Go to Cloud Acceleration Manager (CAM).
+Open your Project.
+Select the Migration Set you want to ingest.
+Click New Ingestion (or Ingest).
 
-Include versions:
-Check this box only if you need old versions of pages/assets.
-Leave it unchecked for most migrations (saves time and space).
+You will see the screen below:
 
-
-3. Select Paths to Include (Most Important Step)
-You have two options:
-Option A – Manual Path (Recommended for beginners)
-
-Type the path you want to migrate (example: /content/my-website)
-Click the checkmark icon to validate the path
-Add more paths if needed
-
-Option B – Upload CSV
-
-Prepare a simple CSV file with one path per line (no commas)
-Click Upload CSV and select your file
-
-4. Add Paths to Exclude (Optional but Useful)
-
-Add any folders you don’t want to migrate
-Example: Exclude /content/dam/temp or /content/my-site/drafts
-
-5. Create the Migration Set
-
-Click Create / Save (button name may vary slightly)
-Your Migration Set is now created and linked to CAM
-
-6. Start Extraction
-
-Click Start Extraction (or Extract)
-The tool will begin copying content to temporary cloud storage
-You can monitor progress in:
-Source AEM CTT screen, or
-CAM dashboard
+New Ingestion Screen – Field Explanation
 
 
-7. After Extraction is Complete
 
-Go back to Cloud Acceleration Manager (CAM)
-Open your Project → Migration Set
-Click Start Ingestion
-Important: Be careful with the “Wipe existing content” option — it deletes everything on the target Cloud instance.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Field / OptionWhat to DoRecommendationMigration SetSelect the migration set you created earlierChoose the correct oneEnvironmentSelect your target Cloud environmentChoose the right one (usually Author first)ServiceChoose Author or PublishStart with AuthorWipe existing content before ingestionImportant checkbox – See warning belowUse carefullyUse pre-copy to speed up ingestionSpeeds up the process by preparing content in advanceKeep it checked (recommended)
+
+Important: Wipe Existing Content Option
+This is the most critical setting on this screen.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+OptionWhat HappensWhen to UseChecked (Wipe)Deletes all existing content on the target and replaces it with the migration setOnly for first migration or when you want a clean startUnchecked (No Wipe)Uses Content Replacement strategy.
+Overlapping content is deleted and replaced. New content is added.Recommended for most cases and top-up migrations
+Warning:
+If you check “Wipe existing content before ingestion”, it will permanently delete everything currently on your Cloud Author/Publish instance. Only use this when you are sure.
+
+Final Steps
+
+Review your selections carefully.
+Keep “Use pre-copy to speed up ingestion” checked.
+Click the Ingest button.
+Monitor the ingestion progress in CAM.
+Once complete, log into your AEM Cloud Author instance and verify the content.
+
+
+Quick Tips for Ingestion
+
+Always do a test ingestion on a small migration set first.
+For regular updates (top-ups), do not enable Wipe.
+Start with Author service, then repeat for Publish if needed.
+After ingestion, check a few pages and assets to confirm everything migrated correctly.
