@@ -1,96 +1,52 @@
-Content Transfer Tool (CTT) – Quick Start Guide
-Simplified Guide for Migrating Content from AMS / On-Premise AEM to AEM as a Cloud Service
----
-What is CTT?
-The Content Transfer Tool (CTT) is Adobe’s official tool to move content from your existing AEM instance (AMS or on-premise, version 6.3 or higher) to AEM as a Cloud Service.
-It works in two simple phases:
-Extraction – Content is taken out of the source AEM and stored temporarily in the cloud.
-Ingestion – Content is imported into your target AEM Cloud Service instance.
-This guide gives you the simplest possible steps so anyone can follow the migration process.
----
-High-Level Migration Flow (Recommended Order)
-Install CTT on your Source AEM instance (AMS)
-Create a Project in Cloud Acceleration Manager (CAM)
-Create Migration Set → Run Extraction
-Run Ingestion to move content to the Cloud
----
-Prerequisites (Keep it Simple)
-Requirement	What You Need
-AEM Version	Source instance must be AEM 6.3 or higher
-Permissions	Admin rights on both Source AEM and Target Cloud Service
-Storage Access	Source AEM must reach Azure Blob Storage (`casstorageprod.blob.core.windows.net`)
-Repository Health	Run Revision Cleanup and consistency checks on source before starting
-Large Repositories	Check segment store / index size limits with Adobe Support if very large
-> **Tip**: Start with a small test migration first. Don’t try to move everything in one go.
----
-Step 1: Install CTT on Source AEM (AMS)
-Log in to Adobe Experience Cloud.
-Go to Software Distribution Portal → AEM as a Cloud Service.
-Search for "Content Transfer Tool" and download the latest version (3.0 or higher recommended).
-Log in to your Source AEM instance.
-Go to Tools → Deployment → Packages.
-Upload the downloaded `.zip` file and Install it.
-Verify installation:
-Go to Operations → Content Migration.
-You should see the Content Transfer Tool interface.
-Done! CTT is now ready on your source system.
----
-Step 2: Create a Project in Cloud Acceleration Manager (CAM)
-Go to Cloud Acceleration Manager in Adobe Experience Cloud.
-Click Create Project.
-Give it a clear name (e.g., “Website Migration – 2026”).
-Add your target AEM as a Cloud Service environment to the project.
-Add team members who will perform the migration.
-> You can create up to **10 migration sets** per CAM project. Create a second project if you need more.
----
-Step 3: Create Migration Set & Run Extraction
-In CAM (or via the CTT UI in Source AEM), create a new Migration Set.
-Select content to migrate (choose one method):
-Use the path browser to pick folders manually, or
-Upload a simple CSV file (one path per line, no commas).
-Recommended approach for simplicity:
-Migrate one section at a time (example: `/content/my-website`).
-Use Exclusions if you want to skip certain folders (e.g., exclude `/content/dam/temp`).
-Configure basic options:
-Include Versions? – Turn ON only if you really need old versions.
-For future “top-up” migrations (adding only new/changed content), follow Adobe’s guidance on version settings.
-Click Start Extraction.
-CTT copies the selected content to secure temporary cloud storage.
-Monitor progress in CAM.
-Tip: Extraction is the heavy lifting. Make sure your paths are correct before starting.
----
-Step 4: Run Ingestion (Import to Cloud)
-Once Extraction shows Success, go to the Migration Set in CAM.
-Click Start Ingestion.
-Important Warning – Wipe Option:
-If you enable “Wipe existing content on Cloud instance before ingestion”, it will delete everything currently on your target Cloud AEM and create a fresh repository.
-Use Wipe only for the very first migration or when you are 100% sure.
-After a wipe, you may need to re-add yourself to the Administrators group to regain access.
-Ingestion starts copying content into your AEM as a Cloud Service.
-After it finishes, log in to the target Cloud instance and verify key pages, assets, and functionality.
----
-Quick Tips for a Smooth Migration
-Test small first — Migrate just one page or one folder before doing big sections.
-Be specific with paths — Avoid selecting root paths like `/content` or `/apps` unless necessary.
-Top-up migrations (adding updates later) — Create a new Migration Set with only the changed paths.
-Migration sets expire — Don’t leave them inactive for long periods.
-After Wipe — Re-add admin users to the correct groups on the target.
-Need help? — Create a support ticket with Adobe Customer Care for storage limit questions or issues.
----
-What’s Different from the Old Technical Document?
-Suggested Edits & Improvements made in this simplified version:
-Reorganized into clear 4-step workflow (exactly as you described: Install on Source → CAM Project → Extraction → Ingestion).
-Removed dense technical limits and put only the essentials in a simple table.
-Used plain language and short sentences.
-Added clear warnings (especially the Wipe option).
-Added practical tips like “migrate one section at a time”.
-Made it scannable with tables, bold text, and emojis for quick reading.
-Kept it short — anyone (even non-technical team members) can understand and follow.
----
-You can copy-paste this entire page directly into Confluence.
-Would you like me to:
-Add more details on any section?
-Create a version with screenshots placeholders?
-Generate a Word/PDF version as well?
-Add a troubleshooting section?
-Just let me know!
+After Entering the Extraction Key in Source CTT – Next Steps
+Once you paste the Extraction Key from CAM into the Source AEM CTT screen, follow these steps:
+1. Fill Migration Set Details
+
+Name: Give your migration set a clear name (e.g., Homepage_Migration_May2026)
+Project name: It should auto-link to your CAM project (confirm it’s correct)
+
+2. Set Parameters
+
+Include versions:
+Check this box only if you need old versions of pages/assets.
+Leave it unchecked for most migrations (saves time and space).
+
+
+3. Select Paths to Include (Most Important Step)
+You have two options:
+Option A – Manual Path (Recommended for beginners)
+
+Type the path you want to migrate (example: /content/my-website)
+Click the checkmark icon to validate the path
+Add more paths if needed
+
+Option B – Upload CSV
+
+Prepare a simple CSV file with one path per line (no commas)
+Click Upload CSV and select your file
+
+4. Add Paths to Exclude (Optional but Useful)
+
+Add any folders you don’t want to migrate
+Example: Exclude /content/dam/temp or /content/my-site/drafts
+
+5. Create the Migration Set
+
+Click Create / Save (button name may vary slightly)
+Your Migration Set is now created and linked to CAM
+
+6. Start Extraction
+
+Click Start Extraction (or Extract)
+The tool will begin copying content to temporary cloud storage
+You can monitor progress in:
+Source AEM CTT screen, or
+CAM dashboard
+
+
+7. After Extraction is Complete
+
+Go back to Cloud Acceleration Manager (CAM)
+Open your Project → Migration Set
+Click Start Ingestion
+Important: Be careful with the “Wipe existing content” option — it deletes everything on the target Cloud instance.
