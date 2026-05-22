@@ -1,93 +1,96 @@
-✅ Here’s clean, simple content for your Confluence page:
+**Role:** Junior AEM Architect
 
-Step 4: Run Ingestion (Import Content to AEM Cloud)
-Ingestion is the final step where content from your Migration Set is moved into your AEM as a Cloud Service instance.
-How to Start Ingestion
+**Document Type:** Atlassian Confluence Page
 
-Go to Cloud Acceleration Manager (CAM).
-Open your Project.
-Select the Migration Set you want to ingest.
-Click New Ingestion (or Ingest).
+**Target Audience:** AEM Developers and QA (Beginner-Friendly)
 
-You will see the screen below:
+---
 
-New Ingestion Screen – Field Explanation
+# A Beginner's Guide to AMS Rate Limiting Alerts (AEM 6.5.21.0 Stage)
 
+### **Overview**
 
+**Beginner:** This document explains how our website protects itself from getting overwhelmed by too much traffic. Recently, our staging environment received four automated warning emails. This page explains exactly what those emails meant and how our defense system works.
 
+**Technical:** This runbook details the AWS WAFv2 rate-limiting architecture for our Adobe Managed Services (AMS) AEM 6.5 Stage environment. It breaks down the evaluation of WebACLs, the threshold breaches, and the incident timeline from recent CloudWatch SNS alerts.
 
+---
 
+### **1. What is Rate Limiting and Why is it at AWS?**
 
+**Beginner:** Rate limiting is like a bouncer at a club. If one person tries to enter 5,000 times in a single minute, the bouncer steps in and stops them so other normal guests can still get inside. We put this "bouncer" in the cloud (AWS) before the traffic ever reaches our actual servers.
 
+**Technical:** In AMS, layer-7 volumetric DDoS protection happens at the **AWS WAF (Web Application Firewall)** edge, not at the Apache Dispatcher layer. If we allowed the Dispatcher to handle rate limiting (e.g., using `mod_evasive`), the EC2 server's CPU would still be consumed processing the malicious packets, leading to server crashes. AWS WAF drops the bad traffic before it ever hits our Virtual Private Cloud (VPC).
 
+---
 
+### **2. The Request Flow**
 
+**Beginner:** When a user types our website URL, their request passes through several checkpoints:
 
+1. **AWS Firewall:** Checks if the user is a threat.
+2. **Load Balancer:** A traffic cop that sends the user to an open server.
+3. **Dispatcher:** Our fast cache memory. It hands over saved pages immediately.
+4. **AEM Publish:** The heavy lifter. If the page isn't saved in the Dispatcher, AEM builds it from scratch.
 
+**Technical:** The exact packet lifecycle for our AMS non-CDN architecture is:
+`Client` → `AWS WAFv2 (WebACLs)` → `Application Load Balancer (ALB)` → `Apache/Dispatcher (EC2)` → `AEM Publish (Jetty/OSGi)`. Rate-based rules are evaluated at step 1.
 
+---
 
+### **3. The Three WAF Rules Explained**
 
+**Beginner:** Our firewall has three specific tripwires. The first one just watches, while the other two actively block bad actors.
 
+**Technical:** AMS provisions a layered defense strategy using AWS Rate-Based Rules. Here are the three rules that triggered during our recent event:
 
+| Rule Name | Limit (per 5 min) | Action | What it does |
+| --- | --- | --- | --- |
+| **...BaseIPRateLimiter_COUNT** | 100 | **Log** | Tracks IPs sending over 100 requests. It *does not block* them. It just records the data. |
+| **...BaseIPRateLimiter_1500_BLOCK** | 1,500 | **Block** | Stops any single IP sending more than 1,500 requests across the entire environment. |
+| **...BaseIPRateLimiter_2000_publisher_BLOCK** | 2,000 | **Block** | Specifically protects the public-facing AEM Publish tier from heavy traffic bursts. |
 
+---
 
+### **4. The Incident Timeline (Decoding the 4 Emails)**
 
+**Beginner:** By reading the four automated emails together, we can see exactly what an automated script or user did to our staging site. They poked the site early in the day, came back later, slowly ramped up their speed, and then blasted the site with thousands of requests all at once. The firewall successfully blocked the blast.
 
+**Technical:** AWS CloudWatch evaluates metrics in 1-minute windows. The four SNS emails correlate to a single, escalating volumetric event. Here is the exact timeline:
 
+* **15:28 UTC (Email 1):** * *Event:* The IP sent **102 requests**.
+* *Result:* Tripped the `COUNT` rule (limit 100). The firewall logged the IP but let the traffic through.
 
 
+* **18:51 UTC (Email 3):** * *Event:* The IP returned and sent **112 requests**.
+* *Result:* Tripped the `COUNT` rule again. Still just observing.
 
 
+* **18:52 UTC (Emails 2, 3, & 4):** * *Event:* The IP aggressively spiked, sending over **5,900 requests** in 60 seconds.
+* *Result:* This massive spike simultaneously tripped all three rules. The WAF successfully executed a `BLOCK` action, dropping the traffic at the AWS edge before it could exhaust the AEM Publish thread pools.
 
 
 
+---
 
+### **5. How to Debug This in the Future**
 
+**Beginner:** If you get these emails, do not panic. Your website is safe. Because the firewall blocked the traffic, you will not find the attacker in your AEM server logs. You must go directly to the AWS WAF logs to find out who did it.
 
+**Technical:** To identify the offending IP address and the targeted URLs, you must query the AWS WAF WebACL logs.
 
+1. Log into AWS Management Console.
+2. Navigate to **CloudWatch Logs Insights**.
+3. Select the WAF log group.
+4. Run the following query:
 
+```sql
+fields httpRequest.clientIp, httpRequest.uri, httpRequest.headers.user-agent
+| filter action = "BLOCK" 
+| stats count(*) as RequestCount by httpRequest.clientIp, httpRequest.uri
+| sort RequestCount desc
+| limit 10
 
-Field / OptionWhat to DoRecommendationMigration SetSelect the migration set you created earlierChoose the correct oneEnvironmentSelect your target Cloud environmentChoose the right one (usually Author first)ServiceChoose Author or PublishStart with AuthorWipe existing content before ingestionImportant checkbox – See warning belowUse carefullyUse pre-copy to speed up ingestionSpeeds up the process by preparing content in advanceKeep it checked (recommended)
+```
 
-Important: Wipe Existing Content Option
-This is the most critical setting on this screen.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-OptionWhat HappensWhen to UseChecked (Wipe)Deletes all existing content on the target and replaces it with the migration setOnly for first migration or when you want a clean startUnchecked (No Wipe)Uses Content Replacement strategy.
-Overlapping content is deleted and replaced. New content is added.Recommended for most cases and top-up migrations
-Warning:
-If you check “Wipe existing content before ingestion”, it will permanently delete everything currently on your Cloud Author/Publish instance. Only use this when you are sure.
-
-Final Steps
-
-Review your selections carefully.
-Keep “Use pre-copy to speed up ingestion” checked.
-Click the Ingest button.
-Monitor the ingestion progress in CAM.
-Once complete, log into your AEM Cloud Author instance and verify the content.
-
-
-Quick Tips for Ingestion
-
-Always do a test ingestion on a small migration set first.
-For regular updates (top-ups), do not enable Wipe.
-Start with Author service, then repeat for Publish if needed.
-After ingestion, check a few pages and assets to confirm everything migrated correctly.
+> **Note:** Because this occurred in the `Stage` environment, a spike of 5,000+ requests is highly likely to be an internal QA load test (e.g., JMeter) or an automated security scan. If confirmed as internal traffic, their static IP must be whitelisted in the WAF to prevent future blocks.
